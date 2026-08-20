@@ -2,8 +2,8 @@
 // Lets the arcade run before Firebase config is pasted in (and offline demos).
 import { applyMatchToStats, emptyStats } from '../services/statsMath'
 
-const KEY = 'couple-arcade:db'
-const UID_KEY = 'couple-arcade:uid'
+const KEY = 'multiplayer-arcade:db'
+const UID_KEY = 'multiplayer-arcade:uid'
 const listeners = { profiles: new Set(), leaderboard: new Set(), matches: new Set() }
 const sessionListeners = new Map() // gameId -> Set<cb>
 

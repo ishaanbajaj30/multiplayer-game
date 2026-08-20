@@ -14,7 +14,7 @@ export default function NavBar() {
   return (
     <header className="nav">
       <NavLink to="/" className="nav-brand">
-        <span className="nav-logo">🕹️</span> Couple Arcade
+        <span className="nav-logo">🕹️</span> Multiplayer Arcade
       </NavLink>
 
       <nav className="nav-links">

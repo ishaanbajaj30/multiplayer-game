@@ -16,7 +16,7 @@ export default function Arcade() {
           ))}
         </div>
         <div>
-          <h1>Couple Arcade</h1>
+          <h1>Multiplayer Arcade</h1>
           <p className="muted">
             {gamesByNewest.length} game{gamesByNewest.length === 1 ? '' : 's'} in the cabinet. Every result feeds one
             leaderboard.

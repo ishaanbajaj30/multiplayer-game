@@ -1,4 +1,4 @@
-# 🕹️ Couple Arcade
+# 🕹️ Multiplayer Arcade
 
 A private two-player arcade. One global leaderboard, one avatar per player, and a plugin system built so that adding a new mini-game takes about five minutes.
 
