@@ -1,0 +1,50 @@
+.ttt { display: grid; gap: 1.25rem; justify-items: center; }
+
+.ttt-seats { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
+.ttt-seat {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 1rem; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+.ttt-seat.is-active { border-color: var(--accent); transform: translateY(-3px); }
+.ttt-seat-name { font-weight: 700; display: flex; align-items: center; gap: 0.4rem; }
+.ttt-seat-mark { font-size: 0.8rem; color: var(--muted); }
+.ttt-you {
+  font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em;
+  background: var(--accent-soft); color: var(--accent-ink);
+  padding: 0.1rem 0.4rem; border-radius: 999px;
+}
+
+.ttt-status { font-size: 1.1rem; font-weight: 600; min-height: 1.6rem; }
+
+.ttt-board-wrap { position: relative; width: min(300px, 84vw); aspect-ratio: 1; }
+.ttt-board {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  width: 100%; height: 100%;
+}
+.ttt-cell {
+  font-size: clamp(2rem, 9vw, 3rem); font-weight: 800; line-height: 1;
+  border: none; border-radius: 14px; cursor: pointer;
+  background: var(--surface); box-shadow: inset 0 0 0 1px var(--border);
+  transition: transform 120ms ease, background 160ms ease;
+}
+.ttt-cell:hover:not(:disabled) { transform: scale(1.04); background: var(--surface-hover); }
+.ttt-cell:disabled { cursor: default; }
+.ttt-cell.is-x { color: var(--accent); }
+.ttt-cell.is-o { color: var(--accent-2); }
+.ttt-cell.is-win { animation: ttt-pop 520ms ease both; background: var(--accent-soft); }
+
+@keyframes ttt-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.ttt-winline { position: absolute; inset: 0; pointer-events: none; }
+.ttt-winline line {
+  stroke: var(--accent); stroke-width: 8; stroke-linecap: round;
+  stroke-dasharray: 440; stroke-dashoffset: 440;
+  animation: ttt-draw 520ms 120ms ease forwards;
+}
+@keyframes ttt-draw { to { stroke-dashoffset: 0; } }

@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Couple Arcade: two anonymous users, everything readable/writable by them.
+// Replace the UIDs below with the two anonymous auth UIDs from the Firebase
+// console (Authentication → Users) after each of you opens the app once.
+service cloud.firestore {
+  function isUs() {
+    return request.auth != null && request.auth.uid in [
+      'PASTE_UID_1',
+      'PASTE_UID_2'
+    ];
+  }
+
+  match /databases/{database}/documents {
+    match /profiles/{playerId} {
+      allow read, write: if isUs();
+    }
+
+    match /leaderboard/{playerId} {
+      allow read, write: if isUs();
+    }
+
+    // Append-only history: matches can be created and read, never edited.
+    match /matches/{matchId} {
+      allow read, create: if isUs();
+      allow update, delete: if false;
+    }
+  }
+}
