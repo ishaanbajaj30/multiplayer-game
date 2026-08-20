@@ -6,6 +6,9 @@ export const manifest = {
   minPlayers: 2,
   maxPlayers: 2,
   createdAt: '2026-08-20',
+  // 'solo-vs' = you play alone on your device; the result scores against your
+  // partner. No shared board, so no turn syncing needed.
+  mode: 'solo-vs',
   // Surviving the mine is worth a flat win; the loser's payout scales with how
   // many times they got baited, so rage literally feeds the opponent's score.
   scoring: { win: 8, draw: 0, loss: 2, pointsPerScore: 1 },

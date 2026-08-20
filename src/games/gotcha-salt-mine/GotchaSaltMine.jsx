@@ -8,7 +8,8 @@ import './styles.css'
 const RAGE_QUIT_PENALTY = 3
 
 export default function GotchaSaltMine({ players, currentUser, onGameEnd }) {
-  const [victimId, setVictimId] = useState(currentUser?.id || players[0].id)
+  // The victim is always whoever is holding this device: you can volunteer for
+  // the salt mine, never sign your partner up for it from your own browser.
   const [phase, setPhase] = useState('intro') // intro | playing | done
   const [levelIndex, setLevelIndex] = useState(0)
   const [progress, setProgress] = useState(0)
@@ -26,7 +27,7 @@ export default function GotchaSaltMine({ players, currentUser, onGameEnd }) {
   mutedRef.current = muted
   const stageRef = useRef(null)
 
-  const victim = players.find((p) => p.id === victimId) || players[0]
+  const victim = players.find((p) => p.id === currentUser?.id) || players[0]
   const opponent = players.find((p) => p.id !== victim.id) || players[1]
 
   const burst = useCallback((clientX, clientY) => {
@@ -160,19 +161,13 @@ export default function GotchaSaltMine({ players, currentUser, onGameEnd }) {
 
       {phase === 'intro' && (
         <div className="gt-panel">
-          <h3>Who is going into the mine?</h3>
+          <h3>{victim.name}, into the mine.</h3>
           <div className="gt-row">
-            {players.map((p) => (
-              <button
-                key={p.id}
-                className={`gt-pick ${p.id === victimId ? 'is-on' : ''}`}
-                onClick={() => setVictimId(p.id)}
-              >
-                <Avatar profile={p} size={40} />
-                {p.name}
-                {p.id === currentUser?.id && <span className="gt-you">you</span>}
-              </button>
-            ))}
+            <span className="gt-pick is-on">
+              <Avatar profile={victim} size={40} />
+              {victim.name}
+              <span className="gt-you">you</span>
+            </span>
           </div>
           <p className="gt-fineprint">
             {LEVELS.length} levels. Each one is trivial. Each one is lying. Every Gotcha scores a point for{' '}

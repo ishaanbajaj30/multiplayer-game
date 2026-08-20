@@ -8,7 +8,10 @@ import gotchaSaltMine from './gotcha-salt-mine'
 
 const GAMES = [ticTacToe, gotchaSaltMine]
 
-const REQUIRED_MANIFEST_FIELDS = ['id', 'title', 'description', 'icon', 'minPlayers', 'maxPlayers', 'createdAt']
+const REQUIRED_MANIFEST_FIELDS = [
+  'id', 'title', 'description', 'icon', 'minPlayers', 'maxPlayers', 'createdAt', 'mode',
+]
+const VALID_MODES = ['online', 'solo-vs', 'hotseat']
 
 // Fail loudly in dev if a new game forgets part of the contract.
 if (import.meta.env.DEV) {
@@ -18,6 +21,9 @@ if (import.meta.env.DEV) {
     if (!m) throw new Error('A registered game is missing its manifest export')
     for (const field of REQUIRED_MANIFEST_FIELDS) {
       if (m[field] === undefined) throw new Error(`Game "${m.id || '?'}" manifest is missing "${field}"`)
+    }
+    if (!VALID_MODES.includes(m.mode)) {
+      throw new Error(`Game "${m.id}" has mode "${m.mode}"; expected one of ${VALID_MODES.join(', ')}`)
     }
     if (typeof game.Component !== 'function') throw new Error(`Game "${m.id}" must export a Component`)
     if (seen.has(m.id)) throw new Error(`Duplicate game id "${m.id}" in the registry`)

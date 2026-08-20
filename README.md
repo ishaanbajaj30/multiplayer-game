@@ -81,6 +81,26 @@ export default function RockPaperScissors({ players, currentUser, onGameEnd }) {
 
 `index.js` stays as-is: `export default { manifest, Component }`.
 
+**Pick a `mode`** — the registry rejects anything else:
+
+| `mode` | Meaning | What you write |
+|---|---|---|
+| `online` | One shared board, both devices, turn-locked | `useGameSession(gameId, makeInitialState)` |
+| `solo-vs` | You play alone; the result scores against your partner | plain local state |
+| `hotseat` | Both players on one device | plain local state |
+
+For an `online` game, keep all game state in the session and derive the rest:
+
+```jsx
+import { useGameSession } from '../../hooks/useGameSession'
+
+const { state, commit, syncing } = useGameSession(manifest.id, () => ({ turn: 'X', board: [] }))
+const isMyTurn = state.turn === myMark          // disable your UI when false
+await commit({ ...state, board: next, turn: 'O' })  // rejected if they moved first
+```
+
+`commit` uses a version check, so a move made against a stale board is refused instead of overwriting your partner. Pass `matchId` to `onGameEnd` (e.g. `` `${manifest.id}-r${round}` ``) so a round reported by both devices only scores once.
+
 **Step 3 — register it.**
 
 `src/games/registry.js` — the only shared file you ever touch:
@@ -98,11 +118,11 @@ Done. The arcade grid, routing (`/#/play/rock-paper-scissors`), leaderboard brea
 
 ## 3. Games in the cabinet
 
-### ⭕ Tic-Tac-Toe
-Local two-player, avatars as the X and O seats, win-line animation. Win 10 / draw 4 / loss 1.
+### ⭕ Tic-Tac-Toe — `mode: 'online'`
+Shared board synced through Firestore: you each play from your own device, and the board is locked when it isn't your turn. Avatars are the X and O seats, with a win-line animation. Rematch starts a new round and alternates who opens. Win 10 / draw 4 / loss 1.
 
-### 🧂 GOTCHA! The Salt Mine
-An insultingly easy task that betrays you. One player is **the victim**, the other just watches the rage counter climb — and that number is on the leaderboard forever.
+### 🧂 GOTCHA! The Salt Mine — `mode: 'solo-vs'`
+An insultingly easy task that betrays you. You are always **the victim** on your own device — you can volunteer yourself, never sign your partner up — and every Gotcha scores for them — and that number is on the leaderboard forever.
 
 - 6 levels, one trick each: **runaway button** (dodges your cursor, gets lazier as you land hits), **fake win** (99% → `lol` → 0, exactly once), **trust fall** (genuinely honest, purely to set up the next level), **reverse day** (labels lie, colour is truth), **decoy** (the huge button is decoration; the real one is 11px in a corner), **jump-scare** (a gentle `WRONG!` flash — clicking mid-flash is flinching).
 - Every bait taken = one **Gotcha**: +1 point to the opponent, salt-particle burst, a taunt, and a soft buzz (mutable via 🔊).
@@ -169,6 +189,7 @@ src/
 |---|---|---|
 | `profiles` | `p1`, `p2` | `name`, `avatar` (part config), `createdAt`, `updatedAt` |
 | `matches` | auto | `gameId`, `players[]`, `entries[]` (`playerId`, `outcome`, `score`, `points`), `winnerId`, `draw`, `meta`, `playedAt` — **append-only** |
+| `sessions` | `<gameId>` | `state` (whatever the game puts there), `version`, `updatedBy`, `updatedAt` — live shared board for online games |
 | `leaderboard` | `p1`, `p2` | `games`, `wins`, `losses`, `draws`, `points`, `streak`, `bestStreak`, `counters{}`, `perGame{gameId:{...}}`, `headToHead{opponentId:{...}}`, `lastPlayedAt` |
 
 Every match write is a single Firestore transaction: read both leaderboard docs → create the match doc → write both updated aggregates. Nothing is ever overwritten in `matches`, so the leaderboard can always be rebuilt from history.
@@ -211,6 +232,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /profiles/{playerId}    { allow read, write: if isUs(); }
     match /leaderboard/{playerId} { allow read, write: if isUs(); }
+    match /sessions/{gameId}      { allow read, write: if isUs(); }
     match /matches/{matchId} {
       allow read, create: if isUs();
       allow update, delete: if false;   // history is append-only

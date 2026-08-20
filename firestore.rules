@@ -20,6 +20,12 @@ service cloud.firestore {
       allow read, write: if isUs();
     }
 
+    // Live shared game state (one doc per game). Freely writable by us; the
+    // version field in the app prevents lost updates, not the rules.
+    match /sessions/{gameId} {
+      allow read, write: if isUs();
+    }
+
     // Append-only history: matches can be created and read, never edited.
     match /matches/{matchId} {
       allow read, create: if isUs();

@@ -5,12 +5,14 @@ import { applyMatchToStats, emptyStats } from '../services/statsMath'
 const KEY = 'couple-arcade:db'
 const UID_KEY = 'couple-arcade:uid'
 const listeners = { profiles: new Set(), leaderboard: new Set(), matches: new Set() }
+const sessionListeners = new Map() // gameId -> Set<cb>
 
 function read() {
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || { profiles: {}, leaderboard: {}, matches: [] }
+    const parsed = JSON.parse(localStorage.getItem(KEY)) || {}
+    return { profiles: {}, leaderboard: {}, matches: [], sessions: {}, ...parsed }
   } catch {
-    return { profiles: {}, leaderboard: {}, matches: [] }
+    return { profiles: {}, leaderboard: {}, matches: [], sessions: {} }
   }
 }
 
@@ -25,6 +27,7 @@ function emit(state) {
   listeners.profiles.forEach((cb) => cb(profiles))
   listeners.leaderboard.forEach((cb) => cb(leaderboard))
   listeners.matches.forEach((cb) => cb(state.matches))
+  sessionListeners.forEach((set, gameId) => set.forEach((cb) => cb(state.sessions[gameId] || null)))
 }
 
 function subscribe(bucket, cb) {
@@ -80,10 +83,34 @@ export const localBackend = {
 
   subscribeMatches: (cb, count = 25) => subscribe('matches', (all) => cb(all.slice(0, count))),
 
+  subscribeSession(gameId, cb) {
+    if (!sessionListeners.has(gameId)) sessionListeners.set(gameId, new Set())
+    sessionListeners.get(gameId).add(cb)
+    cb(read().sessions[gameId] || null)
+    return () => sessionListeners.get(gameId)?.delete(cb)
+  },
+
+  async initSession(gameId, state) {
+    const db = read()
+    if (db.sessions[gameId]) return
+    db.sessions[gameId] = { id: gameId, state, version: 1, updatedBy: localUid() }
+    write(db)
+  },
+
+  async commitSession(gameId, { expectedVersion, state }) {
+    const db = read()
+    const current = db.sessions[gameId]?.version || 0
+    if (current !== expectedVersion) throw new Error('STALE_SESSION')
+    db.sessions[gameId] = { id: gameId, state, version: current + 1, updatedBy: localUid() }
+    write(db)
+  },
+
   async recordMatch(match) {
     const state = read()
     const playedAt = new Date().toISOString()
-    const id = `m_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const id = match.matchId || `m_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    // Idempotent: the same finished round reported twice counts once.
+    if (state.matches.some((m) => m.id === id)) return id
 
     state.matches.unshift({
       id,

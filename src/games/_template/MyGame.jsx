@@ -26,3 +26,19 @@ export default function MyGame({ players, currentUser, onGameEnd }) {
     </div>
   )
 }
+
+// For an `online` game, replace the local state above with shared state:
+//
+//   import { useGameSession } from '../../hooks/useGameSession'
+//   import { manifest } from './manifest'
+//
+//   const { state, commit, syncing, loading } = useGameSession(
+//     manifest.id,
+//     () => ({ turn: 'X', board: Array(9).fill(null), round: 1 }),
+//   )
+//
+//   const isMyTurn = state?.turn === myMark   // gate every control on this
+//   await commit({ ...state, turn: 'O' })     // false if they moved first
+//
+// And report the round idempotently, from the mover's device only:
+//   onGameEnd({ winnerId, matchId: `${manifest.id}-r${state.round}` })

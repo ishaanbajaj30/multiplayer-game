@@ -15,6 +15,7 @@ import { applyMatchToStats, emptyStats } from '../services/statsMath'
 const PROFILES = 'profiles'
 const MATCHES = 'matches'
 const LEADERBOARD = 'leaderboard'
+const SESSIONS = 'sessions'
 
 export const firestoreBackend = {
   kind: 'firestore',
@@ -77,6 +78,44 @@ export const firestoreBackend = {
     return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError)
   },
 
+  subscribeSession(gameId, cb, onError) {
+    return onSnapshot(
+      doc(db, SESSIONS, gameId),
+      (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+      onError,
+    )
+  },
+
+  /** Create the session doc only if nobody has yet (both devices may try). */
+  async initSession(gameId, state) {
+    const user = await ensureSignedIn()
+    const ref = doc(db, SESSIONS, gameId)
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref)
+      if (snap.exists()) return
+      tx.set(ref, { state, version: 1, updatedBy: user.uid, updatedAt: serverTimestamp() })
+    })
+  },
+
+  /**
+   * Optimistic-concurrency write: the move is rejected if someone else moved
+   * first, so two devices can never both "win" the same turn.
+   */
+  async commitSession(gameId, { expectedVersion, state }) {
+    const user = await ensureSignedIn()
+    const ref = doc(db, SESSIONS, gameId)
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref)
+      const current = snap.exists() ? snap.data().version : 0
+      if (current !== expectedVersion) throw new Error('STALE_SESSION')
+      tx.set(
+        ref,
+        { state, version: current + 1, updatedBy: user.uid, updatedAt: serverTimestamp() },
+        { merge: true },
+      )
+    })
+  },
+
   /**
    * Append-only match write + transactional leaderboard aggregation.
    * Reads every leaderboard doc first, then writes — so two devices finishing
@@ -84,10 +123,16 @@ export const firestoreBackend = {
    */
   async recordMatch(match) {
     await ensureSignedIn()
-    const matchRef = doc(collection(db, MATCHES))
+    // A deterministic id makes the write idempotent: if both devices report the
+    // same finished round, the second one is a no-op instead of double points.
+    const matchRef = match.matchId ? doc(db, MATCHES, match.matchId) : doc(collection(db, MATCHES))
     const playedAt = new Date().toISOString()
 
     await runTransaction(db, async (tx) => {
+      if (match.matchId) {
+        const existing = await tx.get(matchRef)
+        if (existing.exists()) return
+      }
       const refs = match.entries.map((e) => doc(db, LEADERBOARD, e.playerId))
       const snaps = await Promise.all(refs.map((ref) => tx.get(ref)))
 

@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import Avatar from '../../components/Avatar'
+import { useGameSession } from '../../hooks/useGameSession'
+import { manifest } from './manifest'
 import './styles.css'
 
 const LINES = [
@@ -8,57 +10,80 @@ const LINES = [
   [0, 4, 8], [2, 4, 6],
 ]
 
-// Endpoint coordinates (in a 300x300 board space) for the win-line animation.
 const CELL = 100
 const center = (i) => [(i % 3) * CELL + CELL / 2, Math.floor(i / 3) * CELL + CELL / 2]
 
 function findWin(board) {
   for (const line of LINES) {
     const [a, b, c] = line
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return { mark: board[a], line }
-    }
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) return { mark: board[a], line }
   }
   return null
 }
 
+/**
+ * Board state lives in Firestore, so both devices see the same game and only
+ * the player whose turn it is can move. Round 1 starts with X; the starting
+ * mark alternates each round.
+ */
 export default function TicTacToe({ players, currentUser, onGameEnd }) {
-  const [board, setBoard] = useState(Array(9).fill(null))
-  const [xIsNext, setXIsNext] = useState(true)
-  const [submitted, setSubmitted] = useState(false)
-
   const marks = useMemo(() => ({ X: players[0], O: players[1] }), [players])
-  const win = useMemo(() => findWin(board), [board])
-  const full = board.every(Boolean)
+  const seatOf = useCallback((mark) => marks[mark]?.id, [marks])
+
+  const makeInitialState = useCallback(
+    () => ({ board: Array(9).fill(null), turn: 'X', round: 1, endedAt: null }),
+    [],
+  )
+
+  const { state, loading, syncing, commit, error } = useGameSession(manifest.id, makeInitialState)
+  const reported = useRef(null)
+
+  const board = state?.board || null
+  const win = useMemo(() => (board ? findWin(board) : null), [board])
+  const full = Boolean(board) && board.every(Boolean)
   const over = Boolean(win) || full
 
-  function play(i) {
-    if (board[i] || over) return
-    const next = board.slice()
-    next[i] = xIsNext ? 'X' : 'O'
-    setBoard(next)
-    setXIsNext(!xIsNext)
+  const myMark =
+    players[0]?.id === currentUser?.id ? 'X' : players[1]?.id === currentUser?.id ? 'O' : null
 
-    const result = findWin(next)
-    const isDraw = !result && next.every(Boolean)
-    if ((result || isDraw) && !submitted) {
-      setSubmitted(true)
-      onGameEnd({
-        winnerId: result ? marks[result.mark].id : null,
-        draw: isDraw,
-        meta: { board: next, moves: next.filter(Boolean).length },
-      })
-    }
-  }
+  // The player who completed the round reports it — they are the one whose mark
+  // is no longer to move. The match id is derived from the round, so a
+  // duplicate report from the other device scores nothing.
+  useEffect(() => {
+    if (!state || !over || !myMark) return
+    if (reported.current === state.round) return
+    if (state.turn === myMark) return // opponent made the closing move
+    reported.current = state.round
+    onGameEnd({
+      winnerId: win ? seatOf(win.mark) : null,
+      draw: !win && full,
+      matchId: `${manifest.id}-r${state.round}`,
+      meta: { board, round: state.round, moves: board.filter(Boolean).length },
+    })
+  }, [state, over, myMark, win, full, board, seatOf, onGameEnd])
 
-  function rematch() {
-    setBoard(Array(9).fill(null))
-    setXIsNext(true)
-    setSubmitted(false)
-  }
+  if (loading || !state) return <p className="muted">Syncing the board…</p>
 
-  const turnProfile = xIsNext ? marks.X : marks.O
+  const isMyTurn = Boolean(myMark) && myMark === state.turn && !over
+  const turnProfile = marks[state.turn]
   const winnerProfile = win ? marks[win.mark] : null
+
+  async function play(i) {
+    if (board[i] || over || !isMyTurn || syncing) return
+    const next = board.slice()
+    next[i] = myMark
+    await commit({ ...state, board: next, turn: myMark === 'X' ? 'O' : 'X' })
+  }
+
+  async function rematch() {
+    const round = state.round + 1
+    await commit({
+      board: Array(9).fill(null),
+      turn: round % 2 === 1 ? 'X' : 'O', // alternate who opens
+      round,
+      endedAt: null,
+    })
+  }
 
   const linePath = win
     ? (() => {
@@ -73,7 +98,7 @@ export default function TicTacToe({ players, currentUser, onGameEnd }) {
       <div className="ttt-seats">
         {['X', 'O'].map((mark) => {
           const p = marks[mark]
-          const active = !over && (mark === 'X') === xIsNext
+          const active = !over && mark === state.turn
           return (
             <div key={mark} className={`ttt-seat ${active ? 'is-active' : ''}`}>
               <Avatar profile={p} size={56} ring={active ? 'var(--accent)' : null} />
@@ -92,10 +117,10 @@ export default function TicTacToe({ players, currentUser, onGameEnd }) {
       <div className="ttt-status">
         {win && <>🎉 {winnerProfile?.name} takes it</>}
         {!win && full && <>🤝 Dead heat</>}
-        {!over && <>{turnProfile?.name}&rsquo;s turn</>}
+        {!over && (isMyTurn ? <>Your move</> : <>Waiting for {turnProfile?.name}…</>)}
       </div>
 
-      <div className="ttt-board-wrap">
+      <div className={`ttt-board-wrap ${!isMyTurn && !over ? 'is-locked' : ''}`}>
         <div className="ttt-board">
           {board.map((cell, i) => (
             <button
@@ -104,7 +129,7 @@ export default function TicTacToe({ players, currentUser, onGameEnd }) {
                 win && win.line.includes(i) ? 'is-win' : ''
               }`}
               onClick={() => play(i)}
-              disabled={Boolean(cell) || over}
+              disabled={Boolean(cell) || over || !isMyTurn}
               aria-label={`cell ${i + 1}${cell ? `, ${cell}` : ''}`}
             >
               {cell}
@@ -118,9 +143,12 @@ export default function TicTacToe({ players, currentUser, onGameEnd }) {
         )}
       </div>
 
+      {!myMark && <p className="muted small">You are not seated in this match.</p>}
+      {error && <p className="banner banner-error">Sync issue: {String(error.message || error)}</p>}
+
       {over && (
-        <button className="btn btn-primary" onClick={rematch}>
-          Rematch
+        <button className="btn btn-primary" onClick={rematch} disabled={syncing}>
+          Rematch (round {state.round + 1})
         </button>
       )}
     </div>

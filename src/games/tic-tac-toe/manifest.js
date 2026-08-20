@@ -6,6 +6,8 @@ export const manifest = {
   minPlayers: 2,
   maxPlayers: 2,
   createdAt: '2026-08-20',
+  // 'online' = shared board synced through Firestore, turn-locked per seat.
+  mode: 'online',
   // Optional: override the global scoring weights for this game.
   scoring: { win: 10, draw: 4, loss: 1 },
 }

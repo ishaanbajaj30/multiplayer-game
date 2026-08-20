@@ -44,6 +44,10 @@ export default function GameHost() {
 
   const { manifest, Component } = game
   const seated = profiles.slice(0, manifest.maxPlayers)
+  const unclaimed = seated.filter((p) => !p.claimedUid)
+  // An online game needs a real opponent on the other end; a solo-vs game can
+  // be played the moment you have your own seat.
+  const waitingForOpponent = manifest.mode === 'online' && unclaimed.length > 0
 
   return (
     <div className="page">
@@ -59,6 +63,11 @@ export default function GameHost() {
 
       {seated.length < manifest.minPlayers ? (
         <p className="banner banner-warn">This game needs {manifest.minPlayers} players.</p>
+      ) : waitingForOpponent ? (
+        <p className="banner banner-warn">
+          Waiting for {unclaimed.map((p) => p.name).join(' and ')} to open the arcade and claim their seat — this
+          game shares one live board across your devices.
+        </p>
       ) : (
         <div className="card game-stage">
           <Component players={seated} currentUser={currentUser} onGameEnd={onGameEnd} />
